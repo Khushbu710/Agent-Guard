@@ -116,7 +116,7 @@ function AgentPanel({ address }: { address: string }) {
 
   if (!agentData) return <ErrorState message="Agent not found on contract" />
 
-  const onchain = agentData.onchain
+  const onchain = agentData.agent.onchain
   const summary = summaryData?.summary
 
   return (
@@ -186,7 +186,7 @@ function AgentPanel({ address }: { address: string }) {
       </div>
 
       {/* Task history */}
-      {agentData.backendTaskHistory && agentData.backendTaskHistory.length > 0 && (
+      {agentData.agent.backendTaskHistory && agentData.agent.backendTaskHistory.length > 0 && (
         <div className="border border-[#1F2937]">
           <div className="px-4 py-2.5 border-b border-[#1F2937]">
             <h3 className="text-xs font-semibold text-[#F9FAFB] uppercase tracking-wider">Task History</h3>
@@ -200,7 +200,7 @@ function AgentPanel({ address }: { address: string }) {
               </tr>
             </thead>
             <tbody>
-              {agentData.backendTaskHistory.map((task: import('../types').Task, i: number) => (
+              {agentData.agent.backendTaskHistory.map((task: import('../types').Task, i: number) => (
                 <tr key={task.id} className={`hover:bg-[#1A2235] transition-colors ${i > 0 ? 'border-t border-[#1F2937]' : ''}`}>
                   <td className="px-4 py-3 text-xs text-[#F9FAFB]">{task.title}</td>
                   <td className="px-4 py-3 text-xs text-[#9CA3AF]">{TASK_TYPE_LABEL[task.taskType]}</td>

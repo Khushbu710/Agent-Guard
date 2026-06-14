@@ -1,7 +1,7 @@
 import type {
   TasksResponse, TaskResponse, ReportsResponse, ReportResponse,
   SpendResponse, SpendSingleResponse, HealthResponse,
-  ExecuteResponse, AgentProfile, AgentSummaryResponse,
+  ExecuteResponse, AgentResponse, AgentSummaryResponse,
   CreateTaskInput,
   TreasuryBalanceResponse, DepositInput, DepositResponse,
   CreateSpendRequestInput, CreateSpendRequestResponse,
@@ -44,7 +44,7 @@ export const api = {
   // ─── Agents ─────────────────────────────────────────────────────────────────
 
   agents: {
-    get: (address: string) => request<AgentProfile>(`/agents/${address}`),
+    get: (address: string) => request<AgentResponse>(`/agents/${address}`),
     summary: (address: string) => request<AgentSummaryResponse>(`/agents/${address}/summary`),
   },
 

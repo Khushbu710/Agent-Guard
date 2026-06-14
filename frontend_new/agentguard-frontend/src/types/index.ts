@@ -141,6 +141,10 @@ export interface AgentProfile {
   backendTaskCount: number
 }
 
+export interface AgentResponse {
+  agent: AgentProfile
+}
+
 export interface AgentSummaryResponse {
   summary: OnchainAgentSummary & { address: string }
 }
