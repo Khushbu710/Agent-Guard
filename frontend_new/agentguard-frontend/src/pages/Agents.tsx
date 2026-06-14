@@ -116,7 +116,7 @@ function AgentPanel({ address }: { address: string }) {
 
   if (!agentData) return <ErrorState message="Agent not found on contract" />
 
-  const onchain = agentData.agent.onchain
+  const onchain = agentData.onchain
   const summary = summaryData?.summary
 
   return (
