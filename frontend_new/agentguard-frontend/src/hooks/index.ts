@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
-import type { CreateTaskInput, CreateSpendRequestInput } from '../types'
+import type { CreateTaskInput } from '../types'
 
 // ─── Query keys ───────────────────────────────────────────────────────────────
 
@@ -114,14 +114,6 @@ export function useDepositTreasury() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (amountEth: string) => api.treasury.deposit({ amountEth }),
-    onSuccess: () => invalidateTreasury(qc),
-  })
-}
-
-export function useCreateSpendRequest() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (input: CreateSpendRequestInput) => api.treasury.createRequest(input),
     onSuccess: () => invalidateTreasury(qc),
   })
 }

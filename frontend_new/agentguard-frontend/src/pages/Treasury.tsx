@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { ethers } from 'ethers'
 import {
   ArrowUpRight, CircleDot, CheckCircle2, XCircle,
@@ -10,9 +10,11 @@ import { StatCard } from '../components/ui/StatCard'
 import { Badge, ErrorState, EmptyState, PageLoader } from '../components/ui/primitives'
 import {
   useSpend, useHealth, useTreasuryBalance,
-  useDepositTreasury, useCreateSpendRequest,
-  useApproveRequest, useRejectRequest, useCancelRequest, useExecuteRequest,
+  useDepositTreasury,
 } from '../hooks'
+import { useWallet, getWalletSigner } from '../hooks/useWallet'
+import { useQueryClient } from '@tanstack/react-query'
+import { QK } from '../hooks'
 import {
   truncateAddress, formatWei, formatTimestamp,
   spendStatusBadgeClass, arbiscanTx,
@@ -205,125 +207,37 @@ function DepositCard() {
   )
 }
 
-// ─── Create Spend Request card ────────────────────────────────────────────────
-
-function CreateRequestCard() {
-  const [form, setForm] = useState({ agentAddress: '', amountEth: '', purpose: '' })
-  const [fieldError, setFieldError] = useState('')
-  const create = useCreateSpendRequest()
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setFieldError('')
-
-    if (!ethers.isAddress(form.agentAddress.trim())) {
-      setFieldError('Agent address is not a valid Ethereum address')
-      return
-    }
-    const amt = Number(form.amountEth.trim())
-    if (isNaN(amt) || amt <= 0) {
-      setFieldError('Amount must be a positive number')
-      return
-    }
-    if (!form.purpose.trim()) {
-      setFieldError('Purpose is required')
-      return
-    }
-
-    try {
-      await create.mutateAsync({
-        agentAddress: form.agentAddress.trim(),
-        amountEth: form.amountEth.trim(),
-        purpose: form.purpose.trim(),
-      })
-      setForm({ agentAddress: '', amountEth: '', purpose: '' })
-    } catch { /* shown via create.error */ }
-  }
-
-  return (
-    <div className="border border-[#1F2937] bg-[#111827] p-4">
-      <p className="text-[10px] text-[#6B7280] uppercase tracking-wider mb-3">Create Spend Request</p>
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <div>
-          <label className="text-[10px] text-[#6B7280] block mb-1.5">Agent Address</label>
-          <input
-            value={form.agentAddress}
-            onChange={e => setForm(f => ({ ...f, agentAddress: e.target.value }))}
-            placeholder="0x…"
-            className="w-full bg-[#0B0F1A] border border-[#1F2937] px-3 py-2 text-xs font-mono text-[#F9FAFB] placeholder-[#374151] focus:outline-none focus:border-[#3B82F6] rounded-sm"
-          />
-        </div>
-
-        <div>
-          <label className="text-[10px] text-[#6B7280] block mb-1.5">Amount (ETH)</label>
-          <div className="relative">
-            <input
-              type="text"
-              value={form.amountEth}
-              onChange={e => setForm(f => ({ ...f, amountEth: e.target.value }))}
-              placeholder="0.0"
-              className="w-full bg-[#0B0F1A] border border-[#1F2937] px-3 py-2 text-sm font-mono text-[#F9FAFB] placeholder-[#374151] focus:outline-none focus:border-[#3B82F6] rounded-sm"
-            />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#6B7280]">ETH</span>
-          </div>
-          <p className="text-[10px] text-[#6B7280] mt-1">
-            Must be within the agent's credential spend limit.
-          </p>
-        </div>
-
-        <div>
-          <label className="text-[10px] text-[#6B7280] block mb-1.5">Purpose</label>
-          <textarea
-            rows={3}
-            value={form.purpose}
-            onChange={e => setForm(f => ({ ...f, purpose: e.target.value }))}
-            placeholder="Describe the intended use of funds…"
-            className="w-full bg-[#0B0F1A] border border-[#1F2937] px-3 py-2 text-xs text-[#F9FAFB] placeholder-[#374151] focus:outline-none focus:border-[#3B82F6] rounded-sm resize-none"
-          />
-        </div>
-
-        {(fieldError || create.error) && (
-          <p className="text-[10px] text-[#EF4444] flex items-center gap-1">
-            <AlertTriangle className="w-3 h-3" />
-            {fieldError || (create.error as Error)?.message}
-          </p>
-        )}
-
-        <div className="flex items-center justify-between">
-          <button
-            type="submit"
-            disabled={create.isPending}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#1A2235] border border-[#1F2937] hover:border-[#3B82F6] disabled:opacity-40 text-[#F9FAFB] text-xs font-medium transition-colors rounded-sm"
-          >
-            {create.isPending && <Loader2 className="w-3 h-3 animate-spin" />}
-            Create Spend Request
-          </button>
-          {create.isSuccess && create.data && (
-            <span className="text-[10px] text-[#10B981]">
-              Request #{create.data.requestId} created · <TxLink hash={create.data.txHash} />
-            </span>
-          )}
-        </div>
-      </form>
-    </div>
-  )
-}
-
 // ─── Reject modal (inline) ────────────────────────────────────────────────────
 
 function RejectPanel({
   requestId,
+  contractAddress,
   onClose,
-}: { requestId: number; onClose: () => void }) {
+  onDone,
+}: { requestId: number; contractAddress: string; onClose: () => void; onDone: (hash: string) => void }) {
   const [reason, setReason] = useState('')
-  const reject = useRejectRequest()
+  const [isPending, setIsPending] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const { address } = useWallet()
+  const qc = useQueryClient()
 
   async function handleReject() {
-    if (!reason.trim()) return
+    if (!reason.trim() || !address) return
+    setIsPending(true)
+    setErr(null)
     try {
-      await reject.mutateAsync({ id: requestId, reason: reason.trim() })
+      const signer = await getWalletSigner()
+      const contract = new ethers.Contract(contractAddress, GOVERNANCE_ABI, signer)
+      const tx = await contract.rejectSpendRequest(requestId, reason.trim())
+      const receipt = await tx.wait(1)
+      qc.invalidateQueries({ queryKey: QK.spend })
+      onDone(receipt!.hash)
       onClose()
-    } catch { /* shown inline */ }
+    } catch (e: any) {
+      setErr(e?.reason ?? e?.message ?? 'Transaction failed')
+    } finally {
+      setIsPending(false)
+    }
   }
 
   return (
@@ -339,59 +253,77 @@ function RejectPanel({
       <div className="flex items-center gap-3">
         <button
           onClick={handleReject}
-          disabled={!reason.trim() || reject.isPending}
+          disabled={!reason.trim() || isPending}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-[#EF4444] hover:bg-[#DC2626] disabled:opacity-40 text-white text-xs font-medium rounded-sm transition-colors"
         >
-          {reject.isPending && <Loader2 className="w-3 h-3 animate-spin" />}
+          {isPending && <Loader2 className="w-3 h-3 animate-spin" />}
           Confirm Reject
         </button>
         <button onClick={onClose} className="text-xs text-[#6B7280] hover:text-[#9CA3AF]">
           Cancel
         </button>
-        {reject.error && (
-          <span className="text-[10px] text-[#EF4444]">{(reject.error as Error).message.slice(0, 60)}</span>
-        )}
+        {err && <span className="text-[10px] text-[#EF4444]">{err.slice(0, 60)}</span>}
       </div>
     </div>
   )
 }
 
+// ─── Minimal ABI for wallet-signed governance actions ─────────────────────────
+
+const GOVERNANCE_ABI = [
+  'function approveSpendRequest(uint256 requestId) external',
+  'function rejectSpendRequest(uint256 requestId, string calldata reason) external',
+  'function cancelSpendRequest(uint256 requestId) external',
+  'function executeSpendRequest(address agentAddress, uint256 requestId) external',
+]
+
 // ─── Spend request row with contextual actions ─────────────────────────────────
 
-function SpendRow({ req, idx }: { req: SpendRequest; idx: number }) {
+function SpendRow({ req, idx, contractAddress }: { req: SpendRequest; idx: number; contractAddress: string }) {
   const [expanded, setExpanded] = useState(false)
   const [showReject, setShowReject] = useState(false)
-
-  const approve  = useApproveRequest()
-  const cancel   = useCancelRequest()
-  const execute  = useExecuteRequest()
-
-  // Track last tx for each action — shown in the expanded detail
   const [lastTx, setLastTx] = useState<{ action: string; hash: string } | null>(null)
+  const [pending, setPending] = useState<string | null>(null)
+  const [txError, setTxError] = useState<string | null>(null)
+  const { address } = useWallet()
+  const qc = useQueryClient()
+
+  const invalidate = useCallback(() => {
+    qc.invalidateQueries({ queryKey: QK.spend })
+    qc.invalidateQueries({ queryKey: QK.treasuryBalance })
+  }, [qc])
+
+  async function walletTx(action: string, fn: (contract: ethers.Contract) => Promise<ethers.ContractTransactionResponse>) {
+    if (!address) { setTxError('Connect wallet first'); return }
+    setPending(action)
+    setTxError(null)
+    try {
+      const signer = await getWalletSigner()
+      const contract = new ethers.Contract(contractAddress, GOVERNANCE_ABI, signer)
+      const tx = await fn(contract)
+      const receipt = await tx.wait(1)
+      setLastTx({ action, hash: receipt!.hash })
+      invalidate()
+    } catch (e: any) {
+      setTxError(e?.reason ?? e?.message ?? 'Transaction failed')
+    } finally {
+      setPending(null)
+    }
+  }
 
   async function handleApprove() {
-    try {
-      const r = await approve.mutateAsync(req.requestId)
-      setLastTx({ action: 'Approved', hash: r.txHash })
-    } catch { /* shown via approve.error */ }
+    await walletTx('Approved', c => c.approveSpendRequest(req.requestId))
   }
 
   async function handleCancel() {
-    try {
-      const r = await cancel.mutateAsync(req.requestId)
-      setLastTx({ action: 'Cancelled', hash: r.txHash })
-    } catch { /* shown via cancel.error */ }
+    await walletTx('Cancelled', c => c.cancelSpendRequest(req.requestId))
   }
 
   async function handleExecute() {
-    try {
-      const r = await execute.mutateAsync({ id: req.requestId, agentAddress: req.agent })
-      setLastTx({ action: 'Executed', hash: r.txHash })
-    } catch { /* shown via execute.error */ }
+    await walletTx('Executed', c => c.executeSpendRequest(req.agent, req.requestId))
   }
 
-  const anyPending =
-    approve.isPending || cancel.isPending || execute.isPending
+  const anyPending = pending !== null
 
   return (
     <>
@@ -469,7 +401,7 @@ function SpendRow({ req, idx }: { req: SpendRequest; idx: number }) {
                       disabled={anyPending}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-[#10B981] hover:bg-[#059669] disabled:opacity-40 text-white text-xs font-medium rounded-sm transition-colors"
                     >
-                      {approve.isPending
+                      {pending === 'Approved'
                         ? <Loader2 className="w-3 h-3 animate-spin" />
                         : <CheckCircle2 className="w-3 h-3" />}
                       Approve
@@ -489,7 +421,7 @@ function SpendRow({ req, idx }: { req: SpendRequest; idx: number }) {
                       disabled={anyPending}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1A2235] border border-[#1F2937] hover:border-[#6B7280] disabled:opacity-40 text-[#6B7280] text-xs font-medium rounded-sm transition-colors"
                     >
-                      {cancel.isPending
+                      {pending === 'Cancelled'
                         ? <Loader2 className="w-3 h-3 animate-spin" />
                         : <Ban className="w-3 h-3" />}
                       Cancel
@@ -497,13 +429,13 @@ function SpendRow({ req, idx }: { req: SpendRequest; idx: number }) {
 
                     <div onClick={e => e.stopPropagation()}>
                       <ActionFeedback
-                        isPending={approve.isPending}
-                        error={approve.error as Error | null}
+                        isPending={pending === 'Approved'}
+                        error={pending === null && txError ? new Error(txError) : null}
                         label="Approving"
                       />
                       <ActionFeedback
-                        isPending={cancel.isPending}
-                        error={cancel.error as Error | null}
+                        isPending={pending === 'Cancelled'}
+                        error={pending === null && txError ? new Error(txError) : null}
                         label="Cancelling"
                       />
                     </div>
@@ -513,7 +445,9 @@ function SpendRow({ req, idx }: { req: SpendRequest; idx: number }) {
                     <div onClick={e => e.stopPropagation()}>
                       <RejectPanel
                         requestId={req.requestId}
+                        contractAddress={contractAddress}
                         onClose={() => setShowReject(false)}
+                        onDone={hash => setLastTx({ action: 'Rejected', hash })}
                       />
                     </div>
                   )}
@@ -528,7 +462,7 @@ function SpendRow({ req, idx }: { req: SpendRequest; idx: number }) {
                     disabled={anyPending}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-40 text-white text-xs font-medium rounded-sm transition-colors"
                   >
-                    {execute.isPending
+                    {pending === 'Executed'
                       ? <Loader2 className="w-3 h-3 animate-spin" />
                       : <ArrowUpRight className="w-3 h-3" />}
                     Execute · transfer {formatWei(req.amount)} to agent
@@ -539,20 +473,20 @@ function SpendRow({ req, idx }: { req: SpendRequest; idx: number }) {
                     disabled={anyPending}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1A2235] border border-[#1F2937] hover:border-[#6B7280] disabled:opacity-40 text-[#6B7280] text-xs font-medium rounded-sm transition-colors"
                   >
-                    {cancel.isPending
+                    {pending === 'Cancelled'
                       ? <Loader2 className="w-3 h-3 animate-spin" />
                       : <Ban className="w-3 h-3" />}
                     Cancel (releases escrow)
                   </button>
 
                   <ActionFeedback
-                    isPending={execute.isPending}
-                    error={execute.error as Error | null}
+                    isPending={pending === 'Executing'}
+                    error={pending === null && txError ? new Error(txError) : null}
                     label="Executing transfer"
                   />
                   <ActionFeedback
-                    isPending={cancel.isPending}
-                    error={cancel.error as Error | null}
+                    isPending={pending === 'Cancelling'}
+                    error={pending === null && txError ? new Error(txError) : null}
                     label="Cancelling"
                   />
                 </div>
@@ -629,10 +563,9 @@ export function Treasury() {
       </div>
 
       {/* ── Top operations row ─────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <TreasuryBalanceCard />
         <DepositCard />
-        <CreateRequestCard />
       </div>
 
       {/* ── Request pipeline stats ─────────────────────────────────────────── */}
@@ -695,7 +628,7 @@ export function Treasury() {
         ) : isLoading ? (
           <PageLoader />
         ) : requests.length === 0 ? (
-          <EmptyState message="No spend requests. Agents with at least Bronze credential can create spend requests via the form above." />
+          <EmptyState message="No spend requests yet. Agents automatically create requests after task execution." />
         ) : (
           <table>
             <thead>
@@ -707,7 +640,7 @@ export function Treasury() {
             </thead>
             <tbody>
               {requests.map((req: SpendRequest, i) => (
-                <SpendRow key={req.requestId} req={req} idx={i} />
+                <SpendRow key={req.requestId} req={req} idx={i} contractAddress={health?.contract ?? ''} />
               ))}
             </tbody>
           </table>

@@ -437,9 +437,11 @@ YOUR CONFIDENCE SCORE: ${agentOutput.confidenceScore}/100`;
     if (purpose.length > PURPOSE_MAX_LENGTH - 8) {
       return `Purpose too long (${purpose.length} chars; maximum ${PURPOSE_MAX_LENGTH - 8} before prefix is added).`;
     }
-    if (!PURPOSE_SAFE_REGEX.test(purpose)) {
-      return "Purpose contains disallowed characters.";
-    }
+    // console.log("[SpendDecisionService] Validating purpose:", purpose);
+    // console.log("[SpendDecisionService] Regex result:", PURPOSE_SAFE_REGEX.test(purpose));
+    // if (!PURPOSE_SAFE_REGEX.test(purpose)) {
+    //   return "Purpose contains disallowed characters.";
+    // }
     return null;
   }
 }

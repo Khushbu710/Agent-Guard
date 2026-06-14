@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { LayoutDashboard, Users, ClipboardList, FileText, Landmark, Activity } from 'lucide-react'
+import { LayoutDashboard, Users, ClipboardList, FileText, Landmark, Activity, Wallet, AlertTriangle } from 'lucide-react'
 import { useHealth } from '../../hooks'
+import { useWallet } from '../../hooks/useWallet'
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
@@ -9,6 +10,42 @@ const NAV = [
   { to: '/reports', label: 'Reports', icon: FileText },
   { to: '/treasury', label: 'Treasury', icon: Landmark },
 ]
+
+
+function WalletButton() {
+  const { address, isCorrectChain, isConnecting, error, connect } = useWallet()
+
+  if (address) {
+    return (
+      <div className="flex items-center gap-2">
+        {!isCorrectChain && (
+          <div className="flex items-center gap-1 text-[10px] text-[#F59E0B]">
+            <AlertTriangle className="w-3 h-3" />
+            Wrong network
+          </div>
+        )}
+        <div className="flex items-center gap-1.5 px-2.5 py-1 border border-[#1F2937] bg-[#111827]">
+          <div className={`w-1.5 h-1.5 rounded-full ${isCorrectChain ? 'bg-[#10B981]' : 'bg-[#F59E0B]'}`} />
+          <span className="text-[10px] font-mono text-[#9CA3AF]">
+            {address.slice(0, 6)}…{address.slice(-4)}
+          </span>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <button
+      onClick={connect}
+      disabled={isConnecting}
+      className="flex items-center gap-1.5 px-2.5 py-1 border border-[#1F2937] hover:border-[#3B82F6] bg-[#111827] text-[10px] text-[#9CA3AF] hover:text-[#F9FAFB] transition-colors disabled:opacity-50"
+    >
+      <Wallet className="w-3 h-3" />
+      {isConnecting ? 'Connecting…' : 'Connect Wallet'}
+      {error && <span className="text-[#EF4444] ml-1">!</span>}
+    </button>
+  )
+}
 
 export function AppLayout() {
   const { data: health } = useHealth()
@@ -70,11 +107,12 @@ export function AppLayout() {
       {/* ── Main ── */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
-        <header className="h-10 border-b border-[#1F2937] flex items-center px-6 flex-shrink-0">
+        <header className="h-10 border-b border-[#1F2937] flex items-center px-6 flex-shrink-0 justify-between">
           <div className="flex items-center gap-2">
             <Activity className="w-3 h-3 text-[#6B7280]" />
             <span className="text-xs text-[#6B7280]">Trust Framework — Treasury Operations</span>
           </div>
+          <WalletButton />
         </header>
 
         {/* Page content */}
