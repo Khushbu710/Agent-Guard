@@ -14,13 +14,13 @@ Built on **Arbitrum Sepolia**, AgentGuard combines AI decision-making, verifiabl
 ### Frontend
 
 ```text
-[ADD FRONTEND URL]
+(https://agent-guard-wine.vercel.app/)
 ```
 
 ### Backend
 
 ```text
-[ADD BACKEND URL]
+(https://agent-guard-xsll.onrender.com)
 ```
 
 ### Smart Contract
@@ -36,7 +36,7 @@ Built on **Arbitrum Sepolia**, AgentGuard combines AI decision-making, verifiabl
 ### Demo Video
 
 ```text
-[ADD VIDEO LINK]
+(https://youtu.be/KAdVY6d82LE)
 ```
 ---
 
